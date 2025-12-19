@@ -1,0 +1,66 @@
+name: H1 Pro Hunter Stealth Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      ip_list:
+        description: 'Paste IPs here'
+        required: true
+        type: string
+        default: 'scanme.nmap.org'
+
+jobs:
+  pro-stealth-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # 6 Hours Limit
+    
+    steps:
+      - name: Install Nmap
+        run: sudo apt-get update && sudo apt-get install -y nmap
+
+      - name: Create ip.txt File
+        run: |
+          echo "${{ inputs.ip_list }}" | tr ',' '\n' | sed 's/ //g' > ip.txt
+          echo "--- Targets Loaded ---"
+          cat ip.txt
+
+      - name: Run Pro Bug Hunter Scan
+        run: |
+          echo "Starting Pro Bug Hunter Scan (Service Version + Stealth)..."
+          
+          # --- PRO PORT LIST ---
+          # Common Web: 80,443,8080,8443,8000,8008,8888
+          # Admin/Dev Panels: 9000 (SonarQube/Portainer), 9090 (Prometheus), 10000 (Webmin), 3000 (Node/React/Grafana), 5000 (Python/Docker)
+          # Databases (Critical): 1433 (MSSQL), 3306 (MySQL), 5432 (Postgres), 6379 (Redis - No Auth often), 27017 (MongoDB), 9200 (ElasticSearch), 11211 (Memcached)
+          # Infrastructure: 2375 (Docker Unsecured), 10250 (K8s Kubelet), 6443 (K8s API)
+          # Enterprise/Remote: 21 (FTP), 22 (SSH), 23 (Telnet), 25 (SMTP), 53 (DNS), 135,139,445 (SMB/NetBIOS), 3389 (RDP), 5900 (VNC)
+          # Mail/VPN: 110,143,993,995,1194,4500,500
+          
+          PORT_LIST="21,22,23,25,53,80,81,110,111,135,139,143,389,443,445,465,500,587,993,995,1194,1433,1521,2049,2082,2083,2087,2375,27017,3000,3128,3306,3389,3690,4000,4444,4500,5000,5432,5601,5800,5900,6000,6379,6443,7001,8000,8008,8080,8081,8090,8443,8888,9000,9001,9090,9200,9443,10000,10250,11211,27018,50000"
+
+          # Scan Logic:
+          # timeout 350m: Stops at 5h 50m (Graceful Exit)
+          # -sV : Service Version Detection
+          # -Pn : Treat hosts as online
+          # -T2 : Stealthy/Slow timing
+          
+          sudo timeout 350m nmap -vv -Pn -sS -sV -T2 -n -f --randomize-hosts --data-length 15 -p $PORT_LIST --open -iL ip.txt -oN scan_results.txt || true
+
+          echo "Scan finished or timed out."
+
+      - name: Filter & Show Interesting Findings
+        run: |
+          if [ -f scan_results.txt ]; then
+            echo "--- RAW RESULTS ---"
+            # Sirf Open ports aur Version info dikhayega, faltu noise hatayega
+            grep -E "open|Nmap scan report" scan_results.txt
+          else
+            echo "No results found."
+          fi
+
+      - name: Save Full Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pro-hunter-report
+          path: scan_results.txt
