@@ -20,8 +20,7 @@ jobs:
 
       - name: Create ip.txt File
         run: |
-          echo "${{ inputs.ip_list }}" | tr ',' '\n' | sed 's/ //g' > ip.txt
-          echo "--- Targets Loaded ---"
+          
           cat ip.txt
 
       - name: Run Pro Bug Hunter Scan
