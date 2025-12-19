@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       ip_list:
-        description: 'Paste IPs here'
-        required: true
+        description: 'Paste IPs (Leave EMPTY to use repo ip.txt)'
+        required: false 
         type: string
-        default: 'scanme.nmap.org'
+        default: '' 
 
 jobs:
   pro-stealth-scan:
@@ -15,31 +15,37 @@ jobs:
     timeout-minutes: 360 # 6 Hours Limit
     
     steps:
+      # STEP 1: Repo Checkout (Bahut Zaroori hai taaki ip.txt mile)
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Install Nmap
         run: sudo apt-get update && sudo apt-get install -y nmap
 
-      
+      - name: Prepare Target List
+        run: |
+          # Logic: Agar input box mein IP di hai to wo use karo, warna repo wala ip.txt
+          if [ -n "${{ inputs.ip_list }}" ]; then
+            echo "${{ inputs.ip_list }}" > ip.txt
+            echo "Using Manual Input IPs."
+          elif [ -f ip.txt ]; then
+            echo "Using ip.txt from Repository."
+          else
+            echo "Error: No IP list found (Input was empty and ip.txt missing in repo)."
+            exit 1
+          fi
+          
+          echo "Scanning the following targets:"
+          cat ip.txt
 
       - name: Run Pro Bug Hunter Scan
         run: |
           echo "Starting Pro Bug Hunter Scan (Service Version + Stealth)..."
           
-          # --- PRO PORT LIST ---
-          # Common Web: 80,443,8080,8443,8000,8008,8888
-          # Admin/Dev Panels: 9000 (SonarQube/Portainer), 9090 (Prometheus), 10000 (Webmin), 3000 (Node/React/Grafana), 5000 (Python/Docker)
-          # Databases (Critical): 1433 (MSSQL), 3306 (MySQL), 5432 (Postgres), 6379 (Redis - No Auth often), 27017 (MongoDB), 9200 (ElasticSearch), 11211 (Memcached)
-          # Infrastructure: 2375 (Docker Unsecured), 10250 (K8s Kubelet), 6443 (K8s API)
-          # Enterprise/Remote: 21 (FTP), 22 (SSH), 23 (Telnet), 25 (SMTP), 53 (DNS), 135,139,445 (SMB/NetBIOS), 3389 (RDP), 5900 (VNC)
-          # Mail/VPN: 110,143,993,995,1194,4500,500
-          
           PORT_LIST="21,22,23,25,53,80,81,110,111,135,139,143,389,443,445,465,500,587,993,995,1194,1433,1521,2049,2082,2083,2087,2375,27017,3000,3128,3306,3389,3690,4000,4444,4500,5000,5432,5601,5800,5900,6000,6379,6443,7001,8000,8008,8080,8081,8090,8443,8888,9000,9001,9090,9200,9443,10000,10250,11211,27018,50000"
 
           # Scan Logic:
-          # timeout 350m: Stops at 5h 50m (Graceful Exit)
-          # -sV : Service Version Detection
-          # -Pn : Treat hosts as online
-          # -T2 : Stealthy/Slow timing
-          
+          # -iL ip.txt : Reads from the file prepared in previous step
           sudo timeout 350m nmap -vv -Pn -sS -sV -T2 -n -f --randomize-hosts --data-length 15 -p $PORT_LIST --open -iL ip.txt -oN scan_results.txt || true
 
           echo "Scan finished or timed out."
@@ -48,7 +54,7 @@ jobs:
         run: |
           if [ -f scan_results.txt ]; then
             echo "--- RAW RESULTS ---"
-            # Sirf Open ports aur Version info dikhayega, faltu noise hatayega
+            # Sirf Open ports aur Version info dikhayega
             grep -E "open|Nmap scan report" scan_results.txt
           else
             echo "No results found."
