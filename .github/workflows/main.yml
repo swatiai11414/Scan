@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 360 # 6 Hours Limit
     
     steps:
-      # STEP 1: Repo Checkout (Bahut Zaroori hai taaki ip.txt mile)
+      # STEP 1: Repo Checkout
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -24,14 +24,13 @@ jobs:
 
       - name: Prepare Target List
         run: |
-          # Logic: Agar input box mein IP di hai to wo use karo, warna repo wala ip.txt
           if [ -n "${{ inputs.ip_list }}" ]; then
             echo "${{ inputs.ip_list }}" > ip.txt
             echo "Using Manual Input IPs."
           elif [ -f ip.txt ]; then
             echo "Using ip.txt from Repository."
           else
-            echo "Error: No IP list found (Input was empty and ip.txt missing in repo)."
+            echo "Error: No IP list found."
             exit 1
           fi
           
@@ -40,24 +39,28 @@ jobs:
 
       - name: Run Pro Bug Hunter Scan
         run: |
-          echo "Starting Pro Bug Hunter Scan (Service Version + Stealth)..."
+          echo "Starting Pro Bug Hunter Scan (Service Version + Optimized Stealth)..."
           
+          # Defined specific ports to scan
           PORT_LIST="21,22,23,25,53,80,81,110,111,135,139,143,389,443,445,465,500,587,993,995,1194,1433,1521,2049,2082,2083,2087,2375,27017,3000,3128,3306,3389,3690,4000,4444,4500,5000,5432,5601,5800,5900,6000,6379,6443,7001,8000,8008,8080,8081,8090,8443,8888,9000,9001,9090,9200,9443,10000,10250,11211,27018,50000"
 
-          # Scan Logic:
-          # -iL ip.txt : Reads from the file prepared in previous step
-          sudo timeout 350m nmap -vv -Pn -sS -sV -T2 -n -f --randomize-hosts --data-length 15 -p $PORT_LIST --open -iL ip.txt -oN scan_results.txt || true
+          # FIXES APPLIED:
+          # 1. Changed -T2 to -T3 (Balances speed and stealth; T2 is too slow for 52 hosts)
+          # 2. Removed -f (Fragmentation often causes packet drops in GitHub Actions environment)
+          # 3. Added --min-rate 150 (Ensures scan keeps moving even if network is sluggish)
+          
+          sudo nmap -vv -Pn -sS -sV -T3 --min-rate 150 -n --randomize-hosts --data-length 15 -p $PORT_LIST --open -iL ip.txt -oN scan_results.txt
 
-          echo "Scan finished or timed out."
+          echo "Scan process completed."
 
       - name: Filter & Show Interesting Findings
         run: |
           if [ -f scan_results.txt ]; then
             echo "--- RAW RESULTS ---"
-            # Sirf Open ports aur Version info dikhayega
-            grep -E "open|Nmap scan report" scan_results.txt
+            # Shows Open ports, Version info, and IP addresses
+            grep -E "open|Nmap scan report|Service Info" scan_results.txt || echo "No open ports found in grep filter."
           else
-            echo "No results found."
+            echo "No results found (scan_results.txt missing)."
           fi
 
       - name: Save Full Report
